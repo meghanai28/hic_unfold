@@ -23,6 +23,7 @@ from torch.utils.data import DataLoader, Subset
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.stdout.reconfigure(line_buffering=True)
 
 from hic_unfold.encoder import LoopEncoder  # noqa: E402
 from hic_unfold.training import SimulatedDataset, make_positional_c  # noqa: E402

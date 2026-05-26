@@ -29,6 +29,7 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.stdout.reconfigure(line_buffering=True)
 
 from hic_unfold.diffusion import Denoiser, ddim_sample, make_cosine_schedule  # noqa: E402
 from hic_unfold.embedding import classical_mds  # noqa: E402

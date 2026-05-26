@@ -25,6 +25,7 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.stdout.reconfigure(line_buffering=True)
 
 from hic_unfold.diffusion import (  # noqa: E402
     Denoiser,

@@ -29,6 +29,7 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.stdout.reconfigure(line_buffering=True)
 
 from hic_unfold.data import (  # noqa: E402
     hic_to_contact_rate, kr_normalize, load_rao_raw_matrix, slice_and_rebin,

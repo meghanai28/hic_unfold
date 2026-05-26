@@ -1,12 +1,13 @@
-"""Build step 5: retrain p(x | z, c) on real Bintu (D_real, z_hat) pairs.
+"""Ablation: train the diffusion prior on real Bintu data with z conditioning
+forced to zeros at both training and inference.
 
-z_hat are soft probabilities from the simulation-trained encoder. The diffusion
-model's z conditioning channel accepts continuous values, so we feed the
-probabilities directly. mu/sigma come from the real corpus (different scale
-from sim).
+If the mechanism-structured latent is doing real work, this ablated model
+should reproduce the marginal distribution of conformations but should be
+significantly weaker at per-cell conditional reconstruction. The downstream
+guided-sampling test (scripts/22) then quantifies the difference.
 
 Run:
-    python scripts/13_train_real.py
+    python scripts/21_train_real_no_z.py
 """
 
 from __future__ import annotations
@@ -29,11 +30,10 @@ from hic_unfold.diffusion import Denoiser, make_cosine_schedule, q_sample  # noq
 from hic_unfold.training import make_positional_c  # noqa: E402
 
 
-class RealZHatDataset(Dataset):
+class RealNoZDataset(Dataset):
     def __init__(self, npz_path: Path):
         f = np.load(npz_path)
-        self.x = f["x"].astype(np.float32)         # standardized log1p(D_real)
-        self.z = f["z_hat"].astype(np.float32)     # soft probabilities in [0, 1]
+        self.x = f["x"].astype(np.float32)
         self.D = f["D"].astype(np.float32)
         self.mu = float(f["mu"]); self.sigma = float(f["sigma"])
         self.N = int(f["N"])
@@ -42,8 +42,8 @@ class RealZHatDataset(Dataset):
         return self.x.shape[0]
 
     def __getitem__(self, idx: int):
-        z = torch.from_numpy(self.z[idx])[None]
         x = torch.from_numpy(self.x[idx])[None]
+        z = torch.zeros_like(x)
         return z, x
 
 
@@ -59,19 +59,22 @@ def main() -> None:
     val_frac = 0.1
 
     data_path = ROOT / "data" / "real" / f"{region}_preprocessed.npz"
-    ckpt_path = ROOT / "checkpoints" / "step05_diffusion_real.pt"
+    ckpt_path = ROOT / "checkpoints" / "step11_ablated_no_z.pt"
     ckpt_path.parent.mkdir(parents=True, exist_ok=True)
 
-    ds = RealZHatDataset(data_path)
+    ds = RealNoZDataset(data_path)
     N = ds.N
     M = len(ds)
     n_val = max(1, int(M * val_frac))
-    perm = np.random.default_rng(0).permutation(M)
-    val_idx = perm[:n_val].tolist()
-    train_idx = perm[n_val:].tolist()
+    # Use the SAME val split as step 5 so we can compare to the full model
+    # using the same held-out cells.
+    full_ckpt_path = ROOT / "checkpoints" / "step05_diffusion_real.pt"
+    full_ckpt = torch.load(full_ckpt_path, map_location="cpu", weights_only=False)
+    val_idx = list(full_ckpt["val_idx"])
+    train_idx = [i for i in range(M) if i not in set(val_idx)]
     train_loader = DataLoader(Subset(ds, train_idx), batch_size=batch_size, shuffle=True, num_workers=0)
     val_loader = DataLoader(Subset(ds, val_idx), batch_size=batch_size, shuffle=False, num_workers=0)
-    print(f"real dataset: N={N}, train={len(train_idx)}, val={n_val}, "
+    print(f"ABLATION (z=0): N={N}, train={len(train_idx)}, val={n_val}, "
           f"mu={ds.mu:.3f}, sigma={ds.sigma:.3f}")
     print(f"device: {device}")
 
@@ -130,19 +133,23 @@ def main() -> None:
         "N": N, "d_c": d_c, "T": T,
         "mu": ds.mu, "sigma": ds.sigma,
         "train_losses": train_losses, "val_losses": val_losses,
-        "val_idx": val_idx,
+        "val_idx": val_idx, "ablation": "z=0",
     }, ckpt_path)
     print(f"saved {ckpt_path}")
 
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(train_losses, lw=0.4, alpha=0.5, label="train")
     val_x = np.arange(1, num_epochs + 1) * len(train_loader)
-    ax.plot(val_x, val_losses, "o-", color="C1", lw=2, label="val")
+    ax.plot(val_x, val_losses, "o-", color="C1", lw=2, label="val (ablated z=0)")
+    full_val = full_ckpt.get("val_losses")
+    if full_val is not None:
+        ax.plot(val_x[:len(full_val)], full_val, "s-", color="C0", lw=2,
+                label="val (full z conditioning)")
     ax.set_yscale("log"); ax.set_xlabel("step"); ax.set_ylabel("MSE(v)")
-    ax.set_title(f"Step-5 training: real Bintu data (N={N})")
+    ax.set_title(f"ablation training: z conditioning zeroed (N={N})")
     ax.legend(); ax.grid(True, which="both", alpha=0.3)
     fig.tight_layout()
-    out = ROOT / "outputs" / "13_train_real_curve.png"
+    out = ROOT / "outputs" / "21_ablation_training_curve.png"
     fig.savefig(out, dpi=130)
     print(f"saved {out}")
 
