@@ -39,14 +39,20 @@ htmlcov/
 .tox/
 
 # Project artifacts
-outputs/
 data/
-checkpoints/
+outputs/
 *.npz
 *.pt
 *.pth
 *.ckpt
 hic_deconvolution_architecture.md
+ONBOARDING.md
+
+# Checkpoints ARE committed so reviewers don't have to re-run the 6h
+# pipeline to inspect results. Whitelist against the global *.npz / *.pt
+# rules above.
+!checkpoints/
+!checkpoints/**
 
 # Jupyter
 .ipynb_checkpoints/
